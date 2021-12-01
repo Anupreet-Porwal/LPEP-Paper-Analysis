@@ -1,8 +1,9 @@
+# load libraries
 library(BAS)
 library(ncvreg)
 library(glmnet)
 
-
+# Calculate posterior probabilities of each model in model space
 postprobs <- function(gamsamp){
   p <- ncol(gamsamp)
   model.list <-  as.matrix(expand.grid(replicate(p, 0:1, simplify = FALSE)))
@@ -13,6 +14,7 @@ postprobs <- function(gamsamp){
   return(freq/sum(freq))
 }
 
+# Calculate posterior probabilities for each model in model space for BAS method
 bas.postprobs <- function(bas.fit){
   m <- bas.fit$n.models
   p <- bas.fit$n.vars -1
@@ -32,6 +34,7 @@ bas.postprobs <- function(bas.fit){
   return(reordered.probs)
 }
 
+#Calculate 95% credible intervals based on posterior samples for coefficients
 confint.lpep <- function(Betasamples){
 
   ci.bounds <- t(apply(Betasamples,2, quantile, probs=c(0.025,0.975)))
@@ -42,48 +45,49 @@ confint.lpep <- function(Betasamples){
 set.seed(9)
 
 
+# Load LPEP code
 devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LaplacePEP.R?raw=TRUE")
+#load the dataset
 load(url("https://github.com/Anupreet-Porwal/LPEP/blob/master/data/endometrial.RData?raw=TRUE"))
 
+# Load code for Fouskakis PEPs
+devtools::source_url("https://github.com/Anupreet-Porwal/LPEP-Paper-Analysis/blob/main/CR-DRPEP/FouskakisPEPs.R?raw=TRUE")
+
+
+#Data reconfiguration
 y <- endometrial$HG
 x <- as.matrix(subset(endometrial,select = -HG))
 mydata <- endometrial
 colnames(mydata)[ncol(mydata)] <- "y"
+y.f <- cbind(1,y)
 
 
+# MLE calculation - may produce warning
 mle <- glm(y~.,mydata,family = binomial(link="logit"))
+# List of methods
 methods.list <- c("LPEP-g=n",
-                  "UIP-g=n",
-                  "LPEP-robust",
-                  "robust",
-                  #"LPEP-hyperg",
-                  #"hyperg",
-                  "LPEP-hyper-g/n",
-                  "hyper-g/n",
-                  "CR PEP hyper-g",
-                  "DR PEP hyper-g",
-                  "CR PEP hyper-g/n",
-                  "DR PEP hyper-g/n",
+                  "LCL-g=n",
                   "CR PEP-g=n",
                   "DR PEP-g=n",
-                  "SH-g=n",
-                  "SH-robust",
-                  #"SH-hyperg",
-                  "SH-hyper-g/n",
+                  "LPEP-robust",
+                  "LCL-robust",
+                  "LPEP-hyper-g/n",
+                  "LCL-hyper-g/n",
+                  "CR PEP hyper-g/n",
+                  "DR PEP hyper-g/n",
                   "LASSO","SCAD","MCP"
-)#,
-#"Ex-g=n",
-#"Ex-hyper-g",
-#"Ex-hyper-g/n")
-
-
+)
 
 n <- nrow(x)
 p <- ncol(x)
 
+
+# MCMC and burn-in specifications
 nmc <- 10000
 burn=10000
 
+
+# Define matrix to store results
 pip.mat <- matrix(NA,nrow=length(methods.list), ncol=p)
 coef.mat <-matrix(NA,nrow=length(methods.list), ncol=p+1)
 colnames(pip.mat) <- paste("x",1:p, sep="")
@@ -106,7 +110,7 @@ ci.methods[[c]] <- confint.lpep(lpep.n$BetaSamples)
 
 c=c+1
 
-# UIP
+# LCL UIP
 UIP.fit <- bas.glm( y~ ., data=mydata,method="BAS", family=binomial(link = "logit")
                     ,betaprior = g.prior(n))
 pip.mat[ c, ] <- UIP.fit$probne0[-1]
@@ -116,86 +120,6 @@ ci.methods[[c]] <- confint(coef(UIP.fit))[ ,1:2]
 
 c=c+1
 
-# Laplace PEP - robust
-lpep.hg <- Laplace.pep(x,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper="TRUE", hyper.type="robust")
-pip.mat[ c, ] <- colMeans(lpep.hg$GammaSamples)
-coef.mat[c, ] <- colMeans(lpep.hg$BetaSamples)
-model.list[ ,c+p] <- postprobs(lpep.hg$GammaSamples)
-ci.methods[[c]] <- confint.lpep(lpep.hg$BetaSamples)
-
-c=c+1
-
-# robust
-robust.fit <- bas.glm( y~ ., data=mydata,method="BAS", family=binomial(link = "logit")
-                       ,betaprior = robust(n))
-pip.mat[ c, ] <- robust.fit$probne0[-1]
-coef.mat[c, ] <- coef(robust.fit)$postmean
-model.list[ ,c+p] <- bas.postprobs(robust.fit)
-ci.methods[[c]] <- confint(coef(robust.fit))[ ,1:2]
-
-c=c+1
-
-# Laplace PEP - hyper g/n
-lpep.hgn <- Laplace.pep(x,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper="TRUE", hyper.type="hyper-g/n",hyper.param=4)
-pip.mat[ c, ] <- colMeans(lpep.hgn$GammaSamples)
-coef.mat[c, ] <- colMeans(lpep.hgn$BetaSamples)
-model.list[ ,c+p] <- postprobs(lpep.hgn$GammaSamples)
-ci.methods[[c]] <- confint.lpep(lpep.hgn$BetaSamples)
-
-c=c+1
-
-# hyper -g/n
-hypergn.fit <- bas.glm( y~ ., data=mydata,method="BAS", family=binomial(link = "logit")
-                        ,betaprior = hyper.g.n(alpha=4,n))
-pip.mat[ c, ] <- hypergn.fit$probne0[-1]
-coef.mat[c, ] <- coef(hypergn.fit)$postmean
-model.list[ ,c+p] <- bas.postprobs(hypergn.fit)
-ci.methods[[c]] <- confint(coef(hypergn.fit))[ ,1:2]
-
-c=c+1
-
-
-# Fouskakis PEPs
-source("C:/Users/Anupreet Porwal/Dropbox/Research/PEP-GLM/code/main/FouskakisPEPs.R")
-
-y.f <- cbind(1,y)
-
-# CRPEP - hyperg
-cr.hg <- pep.glm(y.f, x,iter=nmc+burn, discard = burn, family = "binomial",
-                 hyper = TRUE, hyper.type = "hyper-g",prior.type="CRPEP")
-pip.mat[c,] <- colMeans(cr.hg$gammas)
-coef.mat[c,  ] <- colMeans(cr.hg$betas)
-model.list[ ,c+p] <- postprobs(cr.hg$gammas)
-ci.methods[[c]] <- confint.lpep(cr.hg$betas)
-c=c+1
-
-# DR PEP - hyper g
-dr.hg <- pep.glm(y.f, x,iter=nmc+burn, discard = burn, family = "binomial",
-                 hyper = TRUE, hyper.type = "hyper-g",prior.type="DRPEP")
-pip.mat[c,] <- colMeans(dr.hg$gammas)
-coef.mat[c,  ] <- colMeans(dr.hg$betas)
-model.list[ ,c+p] <- postprobs(dr.hg$gammas)
-ci.methods[[c]] <- confint.lpep(dr.hg$betas)
-c=c+1
-
-# CRPEP - hyper g/n
-cr.hgn <- pep.glm(y.f, x,iter=nmc+burn, discard = burn, family = "binomial",
-                  hyper = TRUE, hyper.type = "hyper-g/n",prior.type="CRPEP")
-pip.mat[c,] <- colMeans(cr.hgn$gammas)
-coef.mat[c,  ] <- colMeans(cr.hgn$betas)
-model.list[ ,c+p] <- postprobs(cr.hgn$gammas)
-ci.methods[[c]] <- confint.lpep(cr.hgn$betas)
-c=c+1
-
-
-# DR PEP - hyper g/n
-dr.hgn <- pep.glm(y.f, x,iter=nmc+burn, discard = burn, family = "binomial",
-                  hyper = TRUE, hyper.type = "hyper-g/n",prior.type="DRPEP")
-pip.mat[c,] <- colMeans(dr.hgn$gammas)
-coef.mat[c,  ] <- colMeans(dr.hgn$betas)
-model.list[ ,c+p] <- postprobs(dr.hgn$gammas)
-ci.methods[[c]] <- confint.lpep(dr.hgn$betas)
-c=c+1
 
 #CRPEP -g=n
 cr.n <- pep.glm(y.f,x,iter=nmc+burn,discard=burn,family='binomial',model.prob='beta',
@@ -216,58 +140,65 @@ ci.methods[[c]] <- confint.lpep(dr.n$betas)
 c=c+1
 
 
+# Laplace PEP - robust
+lpep.hg <- Laplace.pep(x,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper="TRUE", hyper.type="robust")
+pip.mat[ c, ] <- colMeans(lpep.hg$GammaSamples)
+coef.mat[c, ] <- colMeans(lpep.hg$BetaSamples)
+model.list[ ,c+p] <- postprobs(lpep.hg$GammaSamples)
+ci.methods[[c]] <- confint.lpep(lpep.hg$BetaSamples)
 
-# Sebanes Held -g=n
-sebheld.n <- Laplace.pep(x,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper=FALSE,seb.held=TRUE)
-pip.mat[c, ] <- colMeans(sebheld.n$GammaSamples)
-coef.mat[c, ] <- colMeans(sebheld.n$BetaSamples)
-model.list[ ,c+p] <- postprobs(sebheld.n$GammaSamples)
-ci.methods[[c]] <- confint.lpep(sebheld.n$BetaSamples)
 c=c+1
 
-# Sebanes Held- robust
-sebheld.robust <- Laplace.pep(x,y,nmc=nmc,burn=burn,
-                              model.prior = "beta-binomial", hyper="TRUE",
-                              hyper.type="robust",seb.held = TRUE)
-pip.mat[ c, ] <- colMeans(sebheld.robust$GammaSamples)
-coef.mat[c, ] <- colMeans(sebheld.robust$BetaSamples)
-model.list[ ,c+p] <- postprobs(sebheld.robust$GammaSamples)
-ci.methods[[c]] <- confint.lpep(sebheld.robust$BetaSamples)
+# LCL- robust
+robust.fit <- bas.glm( y~ ., data=mydata,method="BAS", family=binomial(link = "logit")
+                       ,betaprior = robust(n))
+pip.mat[ c, ] <- robust.fit$probne0[-1]
+coef.mat[c, ] <- coef(robust.fit)$postmean
+model.list[ ,c+p] <- bas.postprobs(robust.fit)
+ci.methods[[c]] <- confint(coef(robust.fit))[ ,1:2]
+
 c=c+1
 
-# Sebanes Held- hyper g/n
-sebheld.hgn <- Laplace.pep(x,y,nmc=nmc,burn=burn,
-                           model.prior = "beta-binomial", hyper="TRUE",
-                           hyper.type="hyper-g/n",hyper.param=4,seb.held = TRUE)
-pip.mat[ c, ] <- colMeans(sebheld.hgn$GammaSamples)
-coef.mat[c, ] <- colMeans(sebheld.hgn$BetaSamples)
-model.list[ ,c+p] <- postprobs(sebheld.hgn$GammaSamples)
-ci.methods[[c]] <- confint.lpep(sebheld.hgn$BetaSamples)
+# Laplace PEP - hyper g/n
+lpep.hgn <- Laplace.pep(x,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper="TRUE", hyper.type="hyper-g/n",hyper.param=4)
+pip.mat[ c, ] <- colMeans(lpep.hgn$GammaSamples)
+coef.mat[c, ] <- colMeans(lpep.hgn$BetaSamples)
+model.list[ ,c+p] <- postprobs(lpep.hgn$GammaSamples)
+ci.methods[[c]] <- confint.lpep(lpep.hgn$BetaSamples)
+
 c=c+1
 
-# # Exact BAS -g=n
-# ex.n <- Laplace.pep(x,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper=FALSE,exact.mixture.g =TRUE)
-# pip.mat[c, ] <- colMeans(ex.n$GammaSamples)
-# coef.mat[c, ] <- colMeans(ex.n$BetaSamples)
-# model.list[ ,c+p] <- postprobs(ex.n$GammaSamples)
-# c=c+1
-#
-# # Exact BAS - hyper g
-# ex.hg <- Laplace.pep(x,y,nmc=nmc,burn=burn,
-#                      model.prior = "beta-binomial", hyper="TRUE",
-#                      hyper.type="hyper-g",hyper.param=3,exact.mixture.g =TRUE)
-# pip.mat[ c, ] <- colMeans(ex.hg$GammaSamples)
-# coef.mat[c, ] <- colMeans(ex.hg$BetaSamples)
-# model.list[ ,c+p] <- postprobs(ex.hg$GammaSamples)
-# c=c+1
-#
-# # Exact BAS - hyper g/n
-# ex.hgn <- Laplace.pep(x,y,nmc=nmc,burn=burn,
-#                       model.prior = "beta-binomial", hyper="TRUE",
-#                       hyper.type="hyper-g/n",hyper.param=4,exact.mixture.g =TRUE)
-# pip.mat[ c, ] <- colMeans(ex.hgn$GammaSamples)
-# coef.mat[c, ] <- colMeans(ex.hgn$BetaSamples)
-# model.list[ ,c+p] <- postprobs(ex.hgn$GammaSamples)
+# LCL - hyper -g/n
+hypergn.fit <- bas.glm( y~ ., data=mydata,method="BAS", family=binomial(link = "logit")
+                        ,betaprior = hyper.g.n(alpha=4,n))
+pip.mat[ c, ] <- hypergn.fit$probne0[-1]
+coef.mat[c, ] <- coef(hypergn.fit)$postmean
+model.list[ ,c+p] <- bas.postprobs(hypergn.fit)
+ci.methods[[c]] <- confint(coef(hypergn.fit))[ ,1:2]
+
+c=c+1
+
+
+
+# CRPEP - hyper g/n
+cr.hgn <- pep.glm(y.f, x,iter=nmc+burn, discard = burn, family = "binomial",
+                  hyper = TRUE, hyper.type = "hyper-g/n",prior.type="CRPEP")
+pip.mat[c,] <- colMeans(cr.hgn$gammas)
+coef.mat[c,  ] <- colMeans(cr.hgn$betas)
+model.list[ ,c+p] <- postprobs(cr.hgn$gammas)
+ci.methods[[c]] <- confint.lpep(cr.hgn$betas)
+c=c+1
+
+
+# DR PEP - hyper g/n
+dr.hgn <- pep.glm(y.f, x,iter=nmc+burn, discard = burn, family = "binomial",
+                  hyper = TRUE, hyper.type = "hyper-g/n",prior.type="DRPEP")
+pip.mat[c,] <- colMeans(dr.hgn$gammas)
+coef.mat[c,  ] <- colMeans(dr.hgn$betas)
+model.list[ ,c+p] <- postprobs(dr.hgn$gammas)
+ci.methods[[c]] <- confint.lpep(dr.hgn$betas)
+c=c+1
+
 
 # LASSO
 lasso.fit <- cv.glmnet(x, y, family = "binomial")
@@ -296,15 +227,11 @@ model.list[model.selected ,c+p] <- 1
 c=c+1
 
 
-order2 <- c(1,2,11,12,13,3,4,7,8,14,5,6,9,10,15,16,17,18)
-pip.mat.ord <- pip.mat[order2, ]
-coef.mat.ord <- coef.mat[order2,]
-model.list.ord <- model.list[ ,c(1:p,order2+p)]
-ci.methods <- ci.methods[order2[1:(length(order2)-3)]]
-
-res.endometrial <-list("PIP"=pip.mat.ord,
-                       "coef" = coef.mat.ord,
-                       "model.probs"= model.list.ord,
+# Store results as a list
+res.endometrial <-list("PIP"=pip.mat,
+                       "coef" = coef.mat,
+                       "model.probs"= model.list,
                        "credible.int"=ci.methods)
 
-save(res.endometrial,file = "C:/Users/Anupreet Porwal/Dropbox/Research/PEP-GLM/code/results/endometrial_res.Rda")
+# Save results
+save(res.endometrial,file = "endometrial_res.Rda")
