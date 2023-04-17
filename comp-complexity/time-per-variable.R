@@ -1,0 +1,384 @@
+# Currently Uniform versions have been commented out; only has the Beta-binomial versions
+# change the dimension of map-count (and others) and pip.mat before running uniform cases
+#### Load packages ####
+
+library(caret)      # install.packages('caret', dependencies = c("Depends", "Suggests"))
+library(mlbench)
+library(MASS)
+library(plyr)
+library(PRROC)
+library(glmnet)
+library(BAS)
+packageVersion("BAS")
+library(plyr)
+library(testit)
+library(devtools)
+library(coda)
+
+#### Get arguments from sbatch ####
+# It is advised to run simulated datasets in parallel on cluster
+# to save time
+
+args = commandArgs(TRUE)
+ind = as.numeric(args[1]) # Which simulated dataset to run analysis for
+res.folder <- as.character(args[2]) # Folder where the results need to be stored
+data.location <- as.character(args[3]) # Location where simulated datasets are saved
+
+#### Load data and code ####
+
+load(data.location)
+# Load LPEP code
+devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LaplacePEP.R?raw=TRUE")
+devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LPEP-approx.R?raw=TRUE")
+
+set.seed(8)
+
+#### PEP - map model finder function #### 
+pep.predict.model <- function(gamsamp,estimator="HPM"){
+  if(estimator=="HPM"){
+    mod.sum <- count(as.data.frame(gamsamp), vars = colnames(gamsamp))
+    map.mod <- mod.sum[which.max(mod.sum$freq),-ncol(mod.sum)]
+  }
+  return(unlist(map.mod))
+}
+
+
+edit.distance <- function(gamsamp,true.gam){
+  edit.dis <- mean(apply(gamsamp, 1, function(x){adist(toString(x),toString(as.integer(true.gam)))}))
+  return(edit.dis)
+}
+
+edit.distance.bas <- function(bas.fit,true.gam){
+  m <- bas.fit$n.models
+  p <- bas.fit$n.vars -1
+  models <- bas.fit$which
+  model.probs <- bas.fit$postprobs
+  model.list.bas <- matrix(0, nrow = m, ncol = p)
+  for (i in 1:m){
+    if(length(models[[i]][-1])==0){next}else{
+      model.list.bas[i, models[[i]][-1]] <- 1
+    }
+  }
+  edit.dis <- model.probs %*% apply(model.list.bas, 1, function(x){adist(toString(x),toString(as.integer(true.gam)))})
+  return(edit.dis)
+}
+
+
+#### Prepare input for model runs ####
+p = p.full.list[[ind]];
+betatrue = Beta.full[[ind]];
+X = X.full[[ind]][, 1:p];
+colnames(X)=paste("V",1:p,sep="")
+y = y.full[[ind]];
+sim.data <- as.data.frame(cbind(X,y))
+true.gam <- (abs(betatrue[-1])>0)
+
+edit.dis = map.count =time.mat = mpm.count = mse.res = avg.model.size <- matrix(0, nrow=1,ncol = 4)
+colnames(edit.dis) = colnames(time.mat) = colnames(map.count)= colnames(mpm.count) = 
+  colnames(mse.res) = colnames(avg.model.size) <- c("LPEP-E: hyperg/n",
+                                                    "LPEP-L: hyperg/n",
+                                                    "LCE: hyperg/n",
+                                                    "LCL: hyperg/n")
+map.mat <- pip.mat <- ess.mat <- matrix(NA,nrow = p, ncol = 4)
+colnames(map.mat) <- colnames(ess.mat)<- colnames(pip.mat) <- c("LPEP-E: hyperg/n",
+                                                                "LPEP-L: hyperg/n",
+                                                                "LCE: hyperg/n",
+                                                                "LCL: hyperg/n")
+time.pervar.mat <- matrix(NA, nrow=5,ncol = 4)
+colnames(time.pervar.mat) <- c("LPEP-E: hyperg/n",
+                        "LPEP-L: hyperg/n",
+                        "LCE: hyperg/n",
+                        "LCL: hyperg/n")
+rownames(time.pervar.mat) <- c("gamma-delta","beta","omega","ystar","delta")
+
+
+nmc=131000
+burn=10000
+
+r <- 1
+c <- 1
+
+#### Models ####
+print("----------------LPEP-E BB(1,1) - Hyperg/n------------")
+start_time <- Sys.time()
+modlpep.e <- Laplace.pep(X,y,nmc=nmc,burn=burn, 
+                         model.prior = "beta-binomial", 
+                         hyper="TRUE", hyper.type="hyper-g/n",
+                         hyper.param=4)
+end_time <- Sys.time()
+time.mat[1,c] <- end_time-start_time
+map.lpep.e <- pep.predict.model(modlpep.e$GammaSamples,estimator = "HPM")
+if(all(true.gam==map.lpep.e)){
+  map.count[r,c] <-1
+}
+map.mat[ ,c] <- map.lpep.e
+pip.mat[ ,c] <- colMeans(modlpep.e$GammaSamples)
+mpm.lpep.e <- (colMeans(modlpep.e$GammaSamples)>=0.5)
+if(all(true.gam==mpm.lpep.e)){
+  mpm.count[r,c] <-1
+}
+ess.mat[ ,c] <- effectiveSize(mcmc(modlpep.e$GammaSamples))
+mse.res[r,c] <- mean((betatrue-colMeans(modlpep.e$BetaSamples))^2)
+avg.model.size[r,c] <- mean(rowSums(modlpep.e$GammaSamples))
+time.pervar.mat[ ,c] <- colMeans(modlpep.e$timemat)
+
+c=c+1
+
+print("----------------LPEP-L BB(1,1) - Hyperg/n------------")
+start_time <- Sys.time()
+modlpep.l <- Laplace.pep.approx(X,y,nmc=nmc,burn=burn, 
+                                model.prior = "beta-binomial", 
+                                hyper="TRUE", hyper.type="hyper-g/n",
+                                hyper.param=4)
+
+end_time <- Sys.time()
+time.mat[1,c] <- end_time-start_time
+map.lpep.l <- pep.predict.model(modlpep.l$GammaSamples,estimator = "HPM")
+if(all(true.gam==map.lpep.l)){
+  map.count[r,c] <-1
+}
+map.mat[ ,c] <- map.lpep.l
+pip.mat[ ,c] <- colMeans(modlpep.l$GammaSamples)
+mpm.lpep.l <- (colMeans(modlpep.l$GammaSamples)>=0.5)
+if(all(true.gam==mpm.lpep.l)){
+  mpm.count[r,c] <-1
+}
+ess.mat[ ,c] <- effectiveSize(mcmc(modlpep.l$GammaSamples))
+mse.res[r,c] <- mean((betatrue-colMeans(modlpep.l$BetaSamples))^2)
+avg.model.size[r,c] <- mean(rowSums(modlpep.l$GammaSamples))
+time.pervar.mat[ ,c] <- colMeans(modlpep.l$timemat)
+
+c=c+1
+
+print("----------------LCE: Hyperg/n ------------")
+start_time <- Sys.time()
+modlce.n <- Laplace.pep(X,y,nmc=nmc,burn=burn, 
+                        model.prior = "beta-binomial", 
+                        hyper="TRUE", hyper.type="hyper-g/n",
+                        hyper.param=4,exact.mixture.g=TRUE)
+
+end_time <- Sys.time()
+time.mat[1,c] <- end_time-start_time
+map.lce.n <- pep.predict.model(modlce.n$GammaSamples,estimator = "HPM")
+if(all(true.gam==map.lce.n)){
+  map.count[r,c] <-1
+}
+map.mat[ ,c] <- map.lce.n
+pip.mat[ ,c] <- colMeans(modlce.n$GammaSamples)
+mpm.lce.n <- (colMeans(modlce.n$GammaSamples)>=0.5)
+if(all(true.gam==mpm.lce.n)){
+  mpm.count[r,c] <-1
+}
+ess.mat[ ,c] <- effectiveSize(mcmc(modlce.n$GammaSamples))
+mse.res[r,c] <- mean((betatrue-colMeans(modlce.n$BetaSamples))^2)
+avg.model.size[r,c] <- mean(rowSums(modlce.n$GammaSamples))
+time.pervar.mat[ ,c] <- colMeans(modlce.n$timemat)
+
+
+
+c=c+1
+
+print("----------------LCL: Hyperg/n ------------")
+start_time <- Sys.time()
+modlcl.n <- Laplace.pep.approx(X,y,nmc=nmc,burn=burn, 
+                               model.prior = "beta-binomial", 
+                               hyper="TRUE", hyper.type="hyper-g/n",
+                               hyper.param=4,exact.mixture.g=TRUE)
+
+end_time <- Sys.time()
+time.mat[1,c] <- end_time-start_time
+map.lcl.n <- pep.predict.model(modlcl.n$GammaSamples,estimator = "HPM")
+if(all(true.gam==map.lcl.n)){
+  map.count[r,c] <-1
+}
+map.mat[ ,c] <- map.lcl.n
+pip.mat[ ,c] <- colMeans(modlcl.n$GammaSamples)
+mpm.lcl.n <- (colMeans(modlcl.n$GammaSamples)>=0.5)
+if(all(true.gam==mpm.lcl.n)){
+  mpm.count[r,c] <-1
+}
+ess.mat[ ,c] <- effectiveSize(mcmc(modlcl.n$GammaSamples))
+mse.res[r,c] <- mean((betatrue-colMeans(modlcl.n$BetaSamples))^2)
+avg.model.size[r,c] <- mean(rowSums(modlcl.n$GammaSamples))
+time.pervar.mat[ ,c] <- colMeans(modlcl.n$timemat)
+
+
+#### save results ####
+
+
+results <- list("map.count"=map.count,"mpm.count"=mpm.count, "mse"=mse.res, 
+                "pip.mat"=pip.mat,"model.size"=avg.model.size,
+                "map.mat"=map.mat, "ess.mat"=ess.mat, "time.mat"=time.mat,
+                "time.pervar"=time.pervar.mat)  
+
+
+resultsFile = paste(res.folder,"Dataset_",ind,sep = "")
+
+save(results, file = paste(resultsFile,"rda",sep = "."))
+
+
+#### Uniform cases if we need them ####
+# 
+# print("----------------LPEP- Uniform - delta=n------------")
+# # Laplace PEP
+# mod1 <- Laplace.pep(X,y,nmc=nmc,burn=burn, model.prior = "Uniform", hyper=FALSE)
+# 
+# # colnames(mod1$GammaSamples)=paste("V",1:5,sep="")
+# # # Count the unique models and their counts
+# # mod.sum <- count(as.data.frame(mod1$GammaSamples), vars = paste("V",1:5,sep=""))
+# # #
+# # Count the unique models and their counts
+# map.1 <- pep.predict.model(mod1$GammaSamples,estimator = "HPM")
+# if(all(true.gam==map.1)){
+#   map.count[r,c] <-1
+# }
+# pip.mat[ ,c] <- colMeans(mod1$GammaSamples)
+# mpm.1 <- (colMeans(mod1$GammaSamples)>=0.5)
+# if(all(true.gam==mpm.1)){
+#   mpm.count[r,c] <-1
+# }
+# mse.res[r,c] <- mean((betatrue-colMeans(mod1$BetaSamples))^2)
+# avg.model.size[r,c] <- mean(rowSums(mod1$GammaSamples))
+# 
+# 
+# c=c+1
+# 
+# print("----------------LPEP- Uniform - hyper-g------------")
+# mod2 <- Laplace.pep(X,y,nmc=nmc,burn=burn, model.prior = "Uniform", hyper="TRUE", hyper.type="hyper-g",hyper.param=3)
+# map.2 <- pep.predict.model(mod2$GammaSamples,estimator = "HPM")
+# if(all(true.gam==map.2)){
+#   map.count[r,c] <-1
+# }
+# pip.mat[ ,c] <- colMeans(mod2$GammaSamples)
+# mpm.2 <- (colMeans(mod2$GammaSamples)>=0.5)
+# if(all(true.gam==mpm.2)){
+#   mpm.count[r,c] <-1
+# }
+# mse.res[r,c] <- mean((betatrue-colMeans(mod2$BetaSamples))^2)
+# avg.model.size[r,c] <- mean(rowSums(mod2$GammaSamples))
+# 
+# 
+# c=c+1
+# 
+# print("---------------- LPEP- Uniform - hyper -g/n a=4------------")
+# mod3 <- Laplace.pep(X,y,nmc=nmc,burn=burn, model.prior = "Uniform", hyper="TRUE", hyper.type="hyper-g/n",hyper.param=4)
+# map.3 <- pep.predict.model(mod3$GammaSamples,estimator = "HPM")
+# if(all(true.gam==map.3)){
+#   map.count[r,c] <-1
+# }
+# pip.mat[ ,c] <- colMeans(mod3$GammaSamples)
+# mpm.3 <- (colMeans(mod3$GammaSamples)>=0.5)
+# if(all(true.gam==mpm.3)){
+#   mpm.count[r,c] <-1
+# }
+# mse.res[r,c] <- mean((betatrue-colMeans(mod3$BetaSamples))^2)
+# avg.model.size[r,c] <- mean(rowSums(mod3$GammaSamples))
+# 
+# 
+# c=c+1
+# 
+# 
+# # UIP
+# if(p==20){
+#   UIP.u.fit <- bas.glm( y~ ., data=sim.data,method="BAS", family=binomial(link = "logit")
+#                         ,betaprior = g.prior(n),modelprior = uniform())  
+# }else if(p==100){
+#   UIP.u.fit <- bas.glm( y~ ., data=sim.data, family=binomial(link = "logit")
+#                         ,betaprior = g.prior(n),modelprior = uniform(),method="MCMC",
+#                         n.models = nmc, MCMC.iterations = nmc, initprobs = 'eplogp', 
+#                         laplace = FALSE)
+# }
+# 
+# UIP.u.hpm <- predict(UIP.u.fit, estimator = "HPM")
+# UIP.u.hpm.mod <- colnames(X) %in%  variable.names(UIP.u.hpm)
+# if(all(true.gam==UIP.u.hpm.mod)){
+#   map.count[r,c] <-1
+# }
+# pip.mat[ ,c] <- UIP.u.fit$probne0[-1]
+# mpm.4 <- (UIP.u.fit$probne0[-1]>=0.5)
+# if(all(true.gam==mpm.4)){
+#   mpm.count[r,c] <-1
+# }
+# mse.res[r,c] <- mean((betatrue-coef(UIP.u.fit)$postmean)^2)
+# avg.model.size[r,c] <- mean(UIP.u.fit$postprobs*UIP.u.fit$size)
+# 
+# 
+# c=c+1
+# 
+# # Hyper g
+# if(p==20){
+#   hyperg.u.fit <- bas.glm( y~ ., data=sim.data,method="BAS", family=binomial(link = "logit")
+#                            ,betaprior = hyper.g(alpha=3),modelprior = uniform())
+# }else if(p==100){
+#   hyperg.u.fit <- bas.glm( y~ ., data=sim.data, family=binomial(link = "logit")
+#                            ,betaprior = hyper.g(alpha=3),modelprior = uniform(),method="MCMC",
+#                            n.models = nmc, MCMC.iterations = nmc, initprobs = 'eplogp', 
+#                            laplace = FALSE)
+#   
+# }
+# hyperg.u.hpm <- predict(hyperg.u.fit, estimator = "HPM")
+# hyperg.u.hpm.mod <- colnames(X) %in%  variable.names(hyperg.u.hpm)
+# if(all(true.gam==hyperg.u.hpm.mod)){
+#   map.count[r,c] <-1
+# }
+# pip.mat[ ,c] <- hyperg.u.fit$probne0[-1]
+# mpm.5 <- (hyperg.u.fit$probne0[-1]>=0.5)
+# if(all(true.gam==mpm.5)){
+#   mpm.count[r,c] <-1
+# }
+# mse.res[r,c] <- mean((betatrue-coef(hyperg.u.fit)$postmean)^2)
+# avg.model.size[r,c] <- mean(hyperg.u.fit$postprobs*hyperg.u.fit$size)
+# 
+# 
+# c=c+1
+# 
+# # # Hyper g/n alpha =3
+# # if(p==20){
+# #   hypergna3.u.fit <- bas.glm( y~ ., data=sim.data,method="BAS", family=binomial(link = "logit")
+# #                               ,betaprior = hyper.g.n(alpha=3,nrow(sim.data)),modelprior = uniform())
+# #   
+# # }else if(p==100){
+# #   hypergna3.u.fit <- bas.glm( y~ ., data=sim.data, family=binomial(link = "logit")
+# #                               ,betaprior = hyper.g.n(alpha=3,nrow(sim.data)),modelprior = uniform(),method="MCMC",
+# #                               n.models = nmc, MCMC.iterations = nmc, initprobs = 'eplogp', 
+# #                               laplace = FALSE)
+# #   
+# # }
+# # 
+# # hypergna3.u.hpm <- predict(hypergna3.u.fit, estimator = "HPM")
+# # hypergna3.u.hpm.mod <- colnames(X) %in%  variable.names(hypergna3.u.hpm)
+# # if(all(true.gam==hypergna3.u.hpm.mod)){
+# #   map.count[r,c] <-1
+# # }
+# # c=c+1
+# 
+# # Hyper g/n alpha =4 ; median is n
+# 
+# if(p==20){
+#   hypergn.u.fit <- bas.glm( y~ ., data=sim.data,method="BAS", family=binomial(link = "logit")
+#                             ,betaprior = hyper.g.n(alpha=4,nrow(sim.data)),modelprior = uniform())
+#   
+# }else if(p==100){
+#   hypergn.u.fit <- bas.glm( y~ ., data=sim.data, family=binomial(link = "logit")
+#                             ,betaprior = hyper.g.n(alpha=4,nrow(sim.data)),modelprior = uniform(),method="MCMC",
+#                             n.models = nmc, MCMC.iterations = nmc, initprobs = 'eplogp', 
+#                             laplace = FALSE)
+#   
+# }
+# 
+# hypergn.u.hpm <- predict(hypergn.u.fit, estimator = "HPM")
+# hypergn.u.hpm.mod <- colnames(X) %in%  variable.names(hypergn.u.hpm)
+# if(all(true.gam==hypergn.u.hpm.mod)){
+#   map.count[r,c] <-1
+# }
+# pip.mat[ ,c] <- hypergn.u.fit$probne0[-1]
+# mpm.6 <- (hypergn.u.fit$probne0[-1]>=0.5)
+# if(all(true.gam==mpm.6)){
+#   mpm.count[r,c] <-1
+# }
+# mse.res[r,c] <- mean((betatrue-coef(hypergn.u.fit)$postmean)^2)
+# avg.model.size[r,c] <- mean(hypergn.u.fit$postprobs*hypergn.u.fit$size)
+# 
+# c=c+1
+
+
