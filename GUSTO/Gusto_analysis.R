@@ -17,6 +17,7 @@ set.seed(9)
 
 # Load LPEP code
 devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LaplacePEP.R?raw=TRUE")
+devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LPEP-approx.R?raw=TRUE")
 
 # Load code for Fouskakis PEPs
 devtools::source_url("https://github.com/Anupreet-Porwal/LPEP-Paper-Analysis/blob/main/CR-DRPEP/FouskakisPEPs.R?raw=TRUE")
@@ -52,16 +53,20 @@ burn <- 10000
 # techniques in parallel if you have access to a cluster
 
 methods.list <- c("LPEP: g=n",
+                  "LPEPL:g=n",
                   "LCL: g=n",
                   "CRPEP: g=n",
                   "DRPEP: g=n",
                   "LPEP: robust",
+                  "LPEPL:robust",
                   "LCL: robust",
                   "LPEP: hyper-g/n",
+                  "LPEPL: hyper-g/n",
                   "LCL: hyper-g/n",
                   "CRPEP: hyper-g/n",
                   "DRPEP: hyper-g/n",
-                  "LASSO","SCAD","MCP"
+                  "LASSO","SCAD","MCP",
+                  
 )
 
 # Define matrix to store results
@@ -83,6 +88,16 @@ coef.mat[c, ] <- colMeans(lpep.n$BetaSamples)
 ci.methods[[c]] <- confint.lpep(lpep.n$BetaSamples)
 
 c=c+1
+
+print("----------------LPEPL- BB(1,1) - delta=n------------")
+
+lpep.n.l <- Laplace.pep.approx(x,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper=FALSE)
+pip.mat[c, ] <- colMeans(lpep.n.l$GammaSamples)
+coef.mat[c, ] <- colMeans(lpep.n.l$BetaSamples)
+ci.methods[[c]] <- confint.lpep(lpep.n.l$BetaSamples)
+
+c=c+1
+
 
 # UIP
 print("----------------LCL - g=n------------")
@@ -122,6 +137,17 @@ ci.methods[[c]] <- confint.lpep(lpep.hg$BetaSamples)
 
 c=c+1
 
+print("----------------LPEPL- BB(1,1) - robust------------")
+# LPEP-l - robust - approx
+lpep.r.l <- Laplace.pep.approx(x,y,nmc=nmc,burn=burn, 
+                               model.prior = "beta-binomial", 
+                               hyper="TRUE", hyper.type="robust")
+pip.mat[ c, ] <- colMeans(lpep.r.l$GammaSamples)
+coef.mat[c, ] <- colMeans(lpep.r.l$BetaSamples)
+ci.methods[[c]] <- confint.lpep(lpep.r.l$BetaSamples)
+
+c=c+1
+
 # robust
 print("----------------LCL - robust------------")
 robust.fit <- bas.glm( y~ ., data=mydata,method="BAS", family=binomial(link = "logit")
@@ -140,6 +166,20 @@ coef.mat[c, ] <- colMeans(lpep.hgn$BetaSamples)
 ci.methods[[c]] <- confint.lpep(lpep.hgn$BetaSamples)
 
 c=c+1
+
+# LPEP - hyper g/n - l
+print("----------------LPEPL- BB(1,1) - hyperg/n------------")
+
+lpep.hgn.l <- Laplace.pep.approx(x,y,nmc=nmc,burn=burn, 
+                                 model.prior = "beta-binomial", 
+                                 hyper="TRUE", hyper.type="hyper-g/n",
+                                 hyper.param=4)
+pip.mat[ c, ] <- colMeans(lpep.hgn.l$GammaSamples)
+coef.mat[c, ] <- colMeans(lpep.hgn.l$BetaSamples)
+ci.methods[[c]] <- confint.lpep(lpep.hgn.l$BetaSamples)
+
+c=c+1
+
 
 # hyper -g/n
 print("----------------LCL- hyper g/n------------")
@@ -167,7 +207,6 @@ pip.mat[c,] <- colMeans(dr.hgn$gammas)
 coef.mat[c,  ] <- colMeans(dr.hgn$betas)
 ci.methods[[c]] <- confint.lpep(dr.hgn$betas)
 c=c+1
-
 
 
 # LASSO

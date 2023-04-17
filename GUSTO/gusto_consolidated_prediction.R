@@ -22,9 +22,9 @@ setwd("./results/Gusto_pred/")
 all.files <- list.files()
 
 # List of methods by type
-method.block <- c("UIP","robust","hypergn", "crgn","drgn",
+method.block <- c("UIP","robust","hypergn",  "crgn","drgn",
                   "crhypergn",
-                  "drhypergn","freq")
+                  "drhypergn","freq","LPEPL-UIP","LPEPL-robust","LPEPL-hypergn")
 
 # List of methods
 methods.list <- c("LPEP: g=n",
@@ -37,7 +37,10 @@ methods.list <- c("LPEP: g=n",
                   "DRPEP: g=n",
                   "CRPEP: hyper-g/n",
                   "DRPEP: hyper-g/n",
-                  "LASSO","SCAD","MCP"
+                  "LASSO","SCAD","MCP",
+                  "LPEPL: g=n",
+                  "LPEPL: robust",
+                  "LPEPL: hyper-g/n"
 )
 
 folds <- 10
@@ -45,7 +48,8 @@ folds <- 10
 fold.num <- paste("Fold",sprintf('%02d', 1:folds),sep="")
 
 # Matrix for storing calibration slope, log score, Brier score and AUC for MAP/BMA models
- cs.map <- cs.bma <- ls.map <- ls.bma <- bs.map <- bs.bma <-  auc.map <- auc.bma <-
+ cs.map <- cs.bma <- ls.map <- ls.bma <- bs.map <- bs.bma <-  auc.map <- auc.bma <- 
+   auprc.map <- auprc.bma <- 
   matrix(NA, nrow = length(methods.list),ncol = length(fold.num))
 
  rownames(cs.map) <- rownames(cs.bma) <- rownames(ls.map) <- rownames(ls.bma) <-
@@ -58,7 +62,7 @@ colnames(auprc.bma) <- colnames(auprc.map) <-colnames(cs.map) <- colnames(cs.bma
 count=1
 for (i in 1: length(method.block)){
 
-  method.files <- all.files[grep(method.block[i], all.files)]
+  method.files <- all.files[grep(paste("^",method.block[i],sep=""), all.files)]
 
 
   for(j in 1:folds){

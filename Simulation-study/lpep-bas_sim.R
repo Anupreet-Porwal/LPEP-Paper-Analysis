@@ -29,7 +29,7 @@ data.location <- as.character(args[3]) # Location where simulated datasets are s
 load(data.location)
 # Load LPEP code
 devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LaplacePEP.R?raw=TRUE")
-
+devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LPEP-approx.R?raw=TRUE")
 
 
 set.seed(8)
@@ -76,20 +76,23 @@ sim.data <- as.data.frame(cbind(X,y))
 true.gam <- (abs(betatrue[-1])>0)
 
 # Define matrix to store results
-edit.dis = map.count = mpm.count = mse.res =avg.model.size <- matrix(0, nrow=1,ncol = 6)
+edit.dis = map.count = mpm.count = mse.res =avg.model.size <- matrix(0, nrow=1,ncol = 9)
 colnames(edit.dis) =  colnames(map.count)= colnames(mpm.count) = colnames(mse.res) = colnames(avg.model.size) <-
   c("LPEP-g=n","LPEP-robust",
     "LPEP-hypergn","BAS-g=n", "BAS-robust",
-    "BAS-hypergn")
+    "BAS-hypergn", "LPEPL-g=n","LPEPL-robust",
+    "LPEPL-hypergn")
 
-map.mat <- pip.mat <- matrix(NA,nrow = p, ncol = 6)
+map.mat <- pip.mat <- matrix(NA,nrow = p, ncol = 9)
 colnames(map.mat) <- colnames(pip.mat) <- c("LPEP-g=n","LPEP-robust",
                        "LPEP-hypergn","BAS-g=n", "BAS-robust",
-                       "BAS-hypergn")
+                       "BAS-hypergn","LPEPL-g=n","LPEPL-robust",
+                       "LPEPL-hypergn")
 
-accept.ratios <- matrix(NA, nrow=3, ncol=3)
+accept.ratios <- matrix(NA, nrow=3, ncol=6)
 colnames(accept.ratios) <- c("LPEP-g=n","LPEP-robust",
-                             "LPEP-hypergn")
+                             "LPEP-hypergn","LPEPL-g=n","LPEPL-robust",
+                             "LPEPL-hypergn")
 rownames(accept.ratios) <- c("y.star.total",'y.star.local','delta')
 
 # MCMC and burn-in specification
@@ -259,6 +262,72 @@ mse.res[r,c] <- mean((betatrue-coef(hypergn.fit)$postmean)^2)
 avg.model.size[r,c] <- sum(hypergn.fit$postprobs*hypergn.fit$size)
 edit.dis[r,c] <- edit.distance.bas(hypergn.fit,true.gam)
 
+
+
+c=c+1
+
+
+print("----------------LPEPL- BB(1,1) - delta=n------------")
+mod8 <-  Laplace.pep.approx(X,y,nmc=nmc,burn=burn, model.prior = "beta-binomial", hyper=FALSE)
+map.8 <- pep.predict.model(mod8$GammaSamples,estimator = "HPM")
+if(all(true.gam==map.8)){
+  map.count[r,c] <-1
+}
+map.mat[ ,c] <- map.8
+pip.mat[ ,c] <- colMeans(mod8$GammaSamples)
+mpm.8 <- (colMeans(mod8$GammaSamples)>=0.5)
+if(all(true.gam==mpm.8)){
+  mpm.count[r,c] <-1
+}
+mse.res[r,c] <- mean((betatrue-colMeans(mod8$BetaSamples))^2)
+avg.model.size[r,c] <- mean(rowSums(mod8$GammaSamples))
+accept.ratios[ ,c] <- c(mod8$acc.ratio.ystar,mod8$acc.ratio.ystar.local,mod8$acc.ratio.delta)
+edit.dis[r,c] <- edit.distance(mod8$GammaSamples,true.gam)
+
+c=c+1
+
+print("----------------LPEP- BB(1,1) - robust------------")
+mod9 <-Laplace.pep.approx(X,y,nmc=nmc,burn=burn, 
+                          model.prior = "beta-binomial", 
+                          hyper="TRUE", hyper.type="robust")
+map.9 <- pep.predict.model(mod9$GammaSamples,estimator = "HPM")
+if(all(true.gam==map.9)){
+  map.count[r,c] <-1
+}
+map.mat[ ,c] <- map.9
+pip.mat[ ,c] <- colMeans(mod9$GammaSamples)
+mpm.9 <- (colMeans(mod9$GammaSamples)>=0.5)
+if(all(true.gam==mpm.9)){
+  mpm.count[r,c] <-1
+}
+mse.res[r,c] <- mean((betatrue-colMeans(mod9$BetaSamples))^2)
+avg.model.size[r,c] <- mean(rowSums(mod9$GammaSamples))
+accept.ratios[ ,c] <- c(mod9$acc.ratio.ystar,mod9$acc.ratio.ystar.local,mod9$acc.ratio.delta)
+edit.dis[r,c] <- edit.distance(mod9$GammaSamples,true.gam)
+
+
+c=c+1
+
+
+print("----------------LPEP- BB(1,1) - hyper-g/n------------")
+mod10 <- Laplace.pep.approx(X,y,nmc=nmc,burn=burn, 
+                            model.prior = "beta-binomial", 
+                            hyper="TRUE", hyper.type="hyper-g/n",
+                            hyper.param=4)
+map.10 <- pep.predict.model(mod10$GammaSamples,estimator = "HPM")
+if(all(true.gam==map.10)){
+  map.count[r,c] <-1
+}
+map.mat[ ,c] <- map.10
+pip.mat[ ,c] <- colMeans(mod10$GammaSamples)
+mpm.10 <- (colMeans(mod10$GammaSamples)>=0.5)
+if(all(true.gam==mpm.10)){
+  mpm.count[r,c] <-1
+}
+mse.res[r,c] <- mean((betatrue-colMeans(mod10$BetaSamples))^2)
+avg.model.size[r,c] <- mean(rowSums(mod10$GammaSamples))
+accept.ratios[ ,c] <- c(mod10$acc.ratio.ystar,mod10$acc.ratio.ystar.local,mod10$acc.ratio.delta)
+edit.dis[r,c] <- edit.distance(mod10$GammaSamples,true.gam)
 
 
 c=c+1

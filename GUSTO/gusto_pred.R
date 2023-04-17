@@ -93,6 +93,7 @@ predict.fouskakis <- function(fit, test,estimator="BMA"){
 
 # Load LPEP code
 devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LaplacePEP.R?raw=TRUE")
+devtools::source_url("https://github.com/Anupreet-Porwal/LPEP/blob/master/R/LPEP-approx.R?raw=TRUE")
 
 # Load code for Fouskakis PEPs
 devtools::source_url("https://github.com/Anupreet-Porwal/LPEP-Paper-Analysis/blob/main/CR-DRPEP/FouskakisPEPs.R?raw=TRUE")
@@ -164,6 +165,7 @@ c=1
 if(method==1){
   print(paste("------------",method.block[method],"----------"))
   methods.list <- c("LPEP: g=n",
+                    "LPEPL: g=n",
                     "LCL: g=n")
   ybma <- matrix(NA, nrow = nrow(data.test),ncol = length(methods.list))
   ymap <- matrix(NA, nrow = nrow(data.test),ncol = length(methods.list))
@@ -179,6 +181,15 @@ if(method==1){
 
   c=c+1
 
+  # Laplace PEPL -g=n
+  lpep.n <- Laplace.pep.approx(x.train,y.train,nmc=nmc,burn=burn, 
+                               model.prior = "beta-binomial", hyper=FALSE)
+  ybma[ ,c] <- predict.lpep(lpep.n,data.test, estimator = "BMA")
+  ymap[ ,c] <- predict.lpep(lpep.n,data.test, estimator = "HPM")
+  #ympm[ ,c] <- predict.lpep(lpep.n,data.test, estimator = "MPM")
+  
+  c=c+1 
+  
   # UIP
   print("----------------LCL - g=n------------")
   UIP.fit <- bas.glm( y~ ., data=data.train,method="BAS", family=binomial(link = "logit")
@@ -191,6 +202,7 @@ if(method==1){
 }else if(method==2){
   print(paste("------------",method.block[method],"----------"))
   methods.list <- c("LPEP: robust",
+                    "LPEPL: robust",
                     "LCL: robust")
   ybma <- matrix(NA, nrow = nrow(data.test),ncol = length(methods.list))
   ymap <- matrix(NA, nrow = nrow(data.test),ncol = length(methods.list))
@@ -199,13 +211,21 @@ if(method==1){
 
    # Laplace PEP - robust
   print("----------------LPEP - robust------------")
-  lpep.hg <- Laplace.pep(x.train,y.train,nmc=nmc,burn=burn, model.prior = "beta-binomial",
+  lpep.rob <- Laplace.pep(x.train,y.train,nmc=nmc,burn=burn, model.prior = "beta-binomial",
                          hyper="TRUE", hyper.type="robust")
-  ybma[ ,c] <- predict.lpep(lpep.hg,data.test, estimator = "BMA")
-  ymap[ ,c] <- predict.lpep(lpep.hg,data.test, estimator = "HPM")
-  #ympm[ ,c] <- predict.lpep(lpep.hg,data.test, estimator = "MPM")
+  ybma[ ,c] <- predict.lpep(lpep.rob,data.test, estimator = "BMA")
+  ymap[ ,c] <- predict.lpep(lpep.rob,data.test, estimator = "HPM")
+  #ympm[ ,c] <- predict.lpep(lpep.rob,data.test, estimator = "MPM")
 
-
+  c=c+1
+  
+  # Laplace PEP - robust
+  lpep.rob <- Laplace.pep.approx(x.train,y.train,nmc=nmc,burn=burn, 
+                                model.prior = "beta-binomial", 
+                                hyper="TRUE", hyper.type="robust")
+  ybma[ ,c] <- predict.lpep(lpep.rob,data.test, estimator = "BMA")
+  ymap[ ,c] <- predict.lpep(lpep.rob,data.test, estimator = "HPM")
+  
   c=c+1
 
   # robust
@@ -223,6 +243,7 @@ if(method==1){
 }else if(method==3){
   print(paste("------------",method.block[method],"----------"))
   methods.list <- c("LPEP: hyper-g/n",
+                    "LPEPL: hyper-g/n",
                     "LCL: hyper-g/n")
   ybma <- matrix(NA, nrow = nrow(data.test),ncol = length(methods.list))
   ymap <- matrix(NA, nrow = nrow(data.test),ncol = length(methods.list))
@@ -239,6 +260,17 @@ if(method==1){
   #ympm[ ,c] <- predict(lpep.hgn,data.test, estimator = "MPM")
 
 
+  c=c+1
+  
+  # Laplace PEP - hyper g/n
+  lpep.hgn <- Laplace.pep.approx(x.train,y.train,nmc=nmc,burn=burn, 
+                                 model.prior = "beta-binomial", 
+                                 hyper="TRUE", hyper.type="hyper-g/n",
+                                 hyper.param=4)
+  ybma[ ,c] <- predict.lpep(lpep.hgn,data.test, estimator = "BMA")
+  ymap[ ,c] <- predict.lpep(lpep.hgn,data.test, estimator = "HPM")
+  #ympm[ ,c] <- predict(lpep.hgn,data.test, estimator = "MPM")
+  
   c=c+1
 
   # hyper -g/n

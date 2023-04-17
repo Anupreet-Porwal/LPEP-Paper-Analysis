@@ -4,7 +4,10 @@ library(reshape2)
 library(dplyr)
 
 # Save working directory to address where all results are stored
-setwd("./results/sim-p100/")
+rho <- 0.9
+setwd("./results/sim-p100-rho-09/")
+# Available upon request from authors
+#setwd("./results/sim-p100/")
 # setwd("./results/sim-p20/")
 
 # Load the datasets
@@ -137,8 +140,8 @@ freq.table <- function(scenario, nmethods=3,method){
 }
 
 
-method_folders <- c("lpep-bas","exact-g","freq")
-nmethods <- c(6,3,3)
+method_folders <- c("lpep-bas","exact-g","freq","lpep-l")
+nmethods <- c(6,3,3,3)
 
 # Matrix to store consolidated results
 auprc.mat <-  modsize.mat <- edit.mat <- mcc.mat <- F1.mat <- map.count <- mse.mat <- mpm.count  <-
@@ -155,16 +158,41 @@ for (j in 1:ncol(map.count)){
     res.summary.lpep <- clydesim.table(scenario = j,nmethods = nmethods[1],method=method_folders[1])
     res.summary.exact <- clydesim.table(scenario = j,nmethods = nmethods[2],method=method_folders[2])
     res.summary.freq <- freq.table(scenario = j,nmethods = nmethods[3],method=method_folders[3])
-
+    res.summary.lpepl <- clydesim.table(scenario = j,nmethods = nmethods[4],method=method_folders[4])
+    
     # Calculate summary
-    map.count[ ,j] <- c(colSums(res.summary.lpep$map.count),colSums(res.summary.exact$map.count),colSums(res.summary.freq$map.count))
-    mpm.count[ ,j] <- c(colSums(res.summary.lpep$mpm.count), colSums(res.summary.exact$mpm.count),colSums(res.summary.freq$mpm.count))
-    mse.mat[ ,j] <- c(colMeans(res.summary.lpep$mse),colMeans(res.summary.exact$mse),colMeans(res.summary.freq$mse))
-    F1.mat[, j] <- c(colMeans(res.summary.lpep$F1),colMeans(res.summary.exact$F1),colMeans(res.summary.freq$F1))
-    mcc.mat[ ,j] <- c(colMeans(res.summary.lpep$MCC),colMeans(res.summary.exact$MCC),colMeans(res.summary.freq$MCC))
-    edit.mat[ ,j] <- c(colMeans(res.summary.lpep$edit.dis),colMeans(res.summary.exact$edit.dis),colMeans(res.summary.freq$edit.dis))
-    modsize.mat[ ,j] <- c(colMeans(res.summary.lpep$modsize),colMeans(res.summary.exact$modsize),colMeans(res.summary.freq$modsize))
-    auprc.mat[ ,j] <- c(colMeans(res.summary.lpep$auprc),colMeans(res.summary.exact$auprc),colMeans(res.summary.freq$auprc))
+    map.count[ ,j] <- c(colSums(res.summary.lpep$map.count),
+                        colSums(res.summary.exact$map.count),
+                        colSums(res.summary.freq$map.count),
+                        colSums(res.summary.lpepl$map.count))
+    mpm.count[ ,j] <- c(colSums(res.summary.lpep$mpm.count), 
+                        colSums(res.summary.exact$mpm.count),
+                        colSums(res.summary.freq$mpm.count),
+                        colSums(res.summary.lpepl$mpm.count))
+    mse.mat[ ,j] <- c(colMeans(res.summary.lpep$mse),
+                      colMeans(res.summary.exact$mse),
+                      colMeans(res.summary.freq$mse),
+                      colMeans(res.summary.lpepl$mse))
+    F1.mat[, j] <- c(colMeans(res.summary.lpep$F1),
+                     colMeans(res.summary.exact$F1),
+                     colMeans(res.summary.freq$F1),
+                     colMeans(res.summary.lpepl$F1))
+    mcc.mat[ ,j] <- c(colMeans(res.summary.lpep$MCC),
+                      colMeans(res.summary.exact$MCC),
+                      colMeans(res.summary.freq$MCC),
+                      colMeans(res.summary.lpepl$MCC))
+    edit.mat[ ,j] <- c(colMeans(res.summary.lpep$edit.dis),
+                       colMeans(res.summary.exact$edit.dis),
+                       colMeans(res.summary.freq$edit.dis),
+                       colMeans(res.summary.lpepl$edit.dis))
+    modsize.mat[ ,j] <- c(colMeans(res.summary.lpep$modsize),
+                          colMeans(res.summary.exact$modsize),
+                          colMeans(res.summary.freq$modsize),
+                          colMeans(res.summary.lpepl$modsize))
+    auprc.mat[ ,j] <- c(colMeans(res.summary.lpep$auprc),
+                        colMeans(res.summary.exact$auprc),
+                        colMeans(res.summary.freq$auprc),
+                        colMeans(res.summary.lpepl$auprc))
 
 }
 
@@ -172,10 +200,13 @@ for (j in 1:ncol(map.count)){
 
 rownames(edit.mat) <- rownames(mcc.mat) <- rownames(F1.mat) <- rownames(map.count) <-
   rownames(mse.mat) <- rownames(mpm.count) <- rownames(auprc.mat) <- rownames(modsize.mat) <-
-  c(colnames(res.summary.lpep$map.count),colnames(res.summary.exact$map.count),colnames(res.summary.freq$map.count))
+  c(colnames(res.summary.lpep$map.count),
+    colnames(res.summary.exact$map.count),
+    colnames(res.summary.freq$map.count),
+    colnames(res.summary.lpepl$map.count))
 
 # Reorder methods to have order similar to paper
-order <- c(1,4,7,2,5,8,3,6,9,10,11,12)
+order <- c(1,4,7,13,2,5,8,14,3,6,9,15,10,11,12)
 
 # Tables corresponding to paper tables
 auprc.mat <- auprc.mat[order, ]
@@ -199,12 +230,21 @@ for (j in 1:8){
   res.summary.lpep <- clydesim.table(scenario = j,nmethods = nmethods[1],method=method_folders[1])
   res.summary.exact <- clydesim.table(scenario = j,nmethods = nmethods[2],method=method_folders[2])
   res.summary.freq <- freq.table(scenario = j,nmethods = nmethods[3],method=method_folders[3])
-
+  res.summary.lpepl <- clydesim.table(scenario = j,nmethods = nmethods[4],method=method_folders[4])
   if(j>=3){
-    F1.agg.uip <- cbind(res.summary.lpep$F1[ ,1],res.summary.exact$F1[ ,1],res.summary.lpep$F1[ ,4])
-    F1.agg.robust <- cbind(res.summary.lpep$F1[ ,2],res.summary.exact$F1[ ,2],res.summary.lpep$F1[ ,5])
-    F1.agg.hypergn <- cbind(res.summary.lpep$F1[ ,3],res.summary.exact$F1[ ,3],res.summary.lpep$F1[ ,6])
-    colnames(F1.agg.uip) <- colnames(F1.agg.robust) <- colnames(F1.agg.hypergn) <- c('LPEP','LCE', 'LCL')
+    F1.agg.uip <- cbind(res.summary.lpep$F1[ ,1],
+                        res.summary.lpepl$F1[ ,1],
+                        res.summary.exact$F1[ ,1],
+                        res.summary.lpep$F1[ ,4])
+    F1.agg.robust <- cbind(res.summary.lpep$F1[ ,2],
+                           res.summary.lpepl$F1[ ,2],
+                           res.summary.exact$F1[ ,2],
+                           res.summary.lpep$F1[ ,5])
+    F1.agg.hypergn <- cbind(res.summary.lpep$F1[ ,3],
+                            res.summary.lpepl$F1[ ,3],
+                            res.summary.exact$F1[ ,3],
+                            res.summary.lpep$F1[ ,6])
+    colnames(F1.agg.uip) <- colnames(F1.agg.robust) <- colnames(F1.agg.hypergn) <- c('LPEP','LPEPL','LCE', 'LCL')
     F1.agg.freq <- res.summary.freq$F1
 
     m1 <- cbind.data.frame(label=rep('UIP',100),F1.agg.uip)
@@ -221,7 +261,7 @@ for (j in 1:8){
     df.final$label <- factor(df.final$label,levels =
                                c("UIP","Robust","Hyper-g/n","Frequentist"))
     datalist[[j-2]] <- cbind.data.frame(df.final,
-                                        corr=rep(ifelse(j %% 2==1,"r=0","r=0.75" ),100),
+                                        corr=rep(ifelse(j %% 2==1,"r=0",ifelse(rho==0.75,"rho=0.75","rho=0.9") ),100),
                                         ptrue=rep(ptrue,100))
 
   }
@@ -270,11 +310,21 @@ for (j in 1:8){
   res.summary.lpep <- clydesim.table(scenario = j,nmethods = nmethods[1],method=method_folders[1])
   res.summary.exact <- clydesim.table(scenario = j,nmethods = nmethods[2],method=method_folders[2])
   res.summary.freq <- freq.table(scenario = j,nmethods = nmethods[3],method=method_folders[3])
-
-  modsize.agg.uip <- cbind(res.summary.lpep$modsize[ ,1],res.summary.exact$modsize[ ,1],res.summary.lpep$modsize[ ,4])
-  modsize.agg.robust <- cbind(res.summary.lpep$modsize[ ,2],res.summary.exact$modsize[ ,2],res.summary.lpep$modsize[ ,5])
-  modsize.agg.hypergn <- cbind(res.summary.lpep$modsize[ ,3],res.summary.exact$modsize[ ,3],res.summary.lpep$modsize[ ,6])
-  colnames(modsize.agg.uip) <- colnames(modsize.agg.robust) <- colnames(modsize.agg.hypergn) <- c('LPEP','LCE', 'LCL')
+  res.summary.lpepl <- clydesim.table(scenario = j,nmethods = nmethods[4],method=method_folders[4])
+  
+  modsize.agg.uip <- cbind(res.summary.lpep$modsize[ ,1],
+                           res.summary.lpepl$modsize[ ,1],
+                           res.summary.exact$modsize[ ,1],
+                           res.summary.lpep$modsize[ ,4])
+  modsize.agg.robust <- cbind(res.summary.lpep$modsize[ ,2],
+                              res.summary.lpepl$modsize[ ,2],
+                              res.summary.exact$modsize[ ,2],
+                              res.summary.lpep$modsize[ ,5])
+  modsize.agg.hypergn <- cbind(res.summary.lpep$modsize[ ,3],
+                               res.summary.lpepl$modsize[ ,3],
+                               res.summary.exact$modsize[ ,3],
+                               res.summary.lpep$modsize[ ,6])
+  colnames(modsize.agg.uip) <- colnames(modsize.agg.robust) <- colnames(modsize.agg.hypergn) <- c('LPEP','LPEPL','LCE', 'LCL')
   modsize.agg.freq <- res.summary.freq$modsize
 
   m1 <- cbind.data.frame(label=rep('UIP',100),modsize.agg.uip)
@@ -291,7 +341,7 @@ for (j in 1:8){
   df.final$label <- factor(df.final$label,levels =
                              c("UIP","Robust","Hyper-g/n","Frequentist"))
   datalist[[j]] <- cbind.data.frame(df.final,
-                                    corr=rep(ifelse(j %% 2==1,"r=0","r=0.75" ),100),
+                                    corr=rep(ifelse(j %% 2==1,"r=0",ifelse(rho==0.75,"rho=0.75","rho=0.9")),100),
                                     ptrue=rep(ptrue,100))
 }
 
@@ -332,7 +382,6 @@ dev.off()
 
 
 ##### MSE plot
-
 datalist=list()
 for (j in 1:8){
 
@@ -343,11 +392,21 @@ for (j in 1:8){
   res.summary.lpep <- clydesim.table(scenario = j,nmethods = nmethods[1],method=method_folders[1])
   res.summary.exact <- clydesim.table(scenario = j,nmethods = nmethods[2],method=method_folders[2])
   res.summary.freq <- freq.table(scenario = j,nmethods = nmethods[3],method=method_folders[3])
-
-  mse.agg.uip <- cbind(res.summary.lpep$mse[ ,1],res.summary.exact$mse[ ,1],res.summary.lpep$mse[ ,4])*1000
-  mse.agg.robust <- cbind(res.summary.lpep$mse[ ,2],res.summary.exact$mse[ ,2],res.summary.lpep$mse[ ,5])*1000
-  mse.agg.hypergn <- cbind(res.summary.lpep$mse[ ,3],res.summary.exact$mse[ ,3],res.summary.lpep$mse[ ,6])*1000
-  colnames(mse.agg.uip) <- colnames(mse.agg.robust) <- colnames(mse.agg.hypergn) <- c('LPEP','LCE', 'LCL')
+  res.summary.lpepl <- clydesim.table(scenario = j,nmethods = nmethods[4],method=method_folders[4])
+  
+  mse.agg.uip <- cbind(res.summary.lpep$mse[ ,1],
+                       res.summary.lpepl$mse[ ,1],
+                       res.summary.exact$mse[ ,1],
+                       res.summary.lpep$mse[ ,4])*1000
+  mse.agg.robust <- cbind(res.summary.lpep$mse[ ,2],
+                          res.summary.lpepl$mse[ ,2],
+                          res.summary.exact$mse[ ,2],
+                          res.summary.lpep$mse[ ,5])*1000
+  mse.agg.hypergn <- cbind(res.summary.lpep$mse[ ,3],
+                           res.summary.lpepl$mse[ ,3],
+                           res.summary.exact$mse[ ,3],
+                           res.summary.lpep$mse[ ,6])*1000
+  colnames(mse.agg.uip) <- colnames(mse.agg.robust) <- colnames(mse.agg.hypergn) <- c('LPEP','LPEPL','LCE', 'LCL')
   mse.agg.freq <- res.summary.freq$mse*1000
 
   m1 <- cbind.data.frame(label=rep('UIP',100),mse.agg.uip)
@@ -364,7 +423,7 @@ for (j in 1:8){
   df.final$label <- factor(df.final$label,levels =
                              c("UIP","Robust","Hyper-g/n","Frequentist"))
   datalist[[j]] <- cbind.data.frame(df.final,
-                                    corr=rep(ifelse(j %% 2==1,"r=0","r=0.75" ),100),
+                                    corr=rep(ifelse(j %% 2==1,"r=0", ifelse(rho==0.75,"rho=0.75","rho=0.9")),100),
                                     ptrue=rep(ptrue,100))
 
 
